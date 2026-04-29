@@ -1,0 +1,39 @@
+name: Aggiorna annunci auto da Subito.it
+
+on:
+  schedule:
+    - cron: "0 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Installa dipendenze
+        run: |
+          pip install playwright
+          playwright install chromium
+          playwright install-deps chromium
+
+      - name: Esegui scraper (scarica auto + immagini)
+        run: python scraper/scraper.py
+
+      - name: Commit cars.json e immagini
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add cars.json img/
+          git diff --staged --quiet || git commit -m "Aggiorna annunci auto $(date +'%d/%m/%Y %H:%M')"
+          git push
