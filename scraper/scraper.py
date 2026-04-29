@@ -1,54 +1,111 @@
 """
 scraper.py - El Principe Garage
-Usa l'API interna di Subito.it (la stessa che usa il browser)
-per ottenere gli annunci del negozio come JSON puro.
-Nessun browser headless necessario — più veloce e affidabile.
+Strategia crediti ottimizzata:
+1. Ogni giorno controlla SE ci sono nuove auto (1 chiamata = 25 crediti)
+2. Solo se ci sono auto nuove → scarica i dettagli (25 crediti per auto nuova)
+3. Ruota automaticamente tra 6 account ScrapingBot (3.000 crediti/mese totali)
+4. Le auto già presenti con immagine non vengono mai ri-scaricate
 """
 
-import json, os, urllib.request, urllib.parse
+import json, os, time, urllib.request, base64, re
 from datetime import datetime, timezone
 
-# ID negozio Subito (visibile nell'URL: shops/54233-...)
-SHOP_ID     = "54233"
-BASE_DIR    = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-OUTPUT_JSON = os.path.join(BASE_DIR, "cars.json")
-IMG_DIR     = os.path.join(BASE_DIR, "img")
+# ── ACCOUNT SCRAPINGBOT (rotazione automatica) ───────────────
+ACCOUNTS = [
+    ("SavYanmar94",  "Yl5MgMO0oULolQpbXSl4IOoz1"),
+    ("Domi28",       "tEBA2RkLkIzi0I6mFn3yhE80D"),
+    ("Genny23",      "TDQZbqp0jLJxcvRn8hAKCrDxx"),
+    ("Nasoni23",     "aR50QSv23t5nLzS1GU2ofGCVA"),
+    ("LamacMak92",   "18uZGwmI8rIPXBd0w3UyPQVPd"),
+    ("Lidwef32",     "w6Ns04tg2aYcIEONc50h93UUF"),
+]
 
-# Endpoint API interno di Subito — restituisce JSON con tutti gli annunci del negozio
-API_URL = f"https://hades.subito.it/v1/search/classifieds?shp={SHOP_ID}&lim=50&start=0&t=s"
+API_URL  = "http://api.scraping-bot.io/scrape/retail"
+SHOP_URL = "https://impresapiu.subito.it/shops/54233-el-principe-di-bavaro-biagio"
 
-HEADERS = {
-    "User-Agent":  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
-    "Accept":      "application/json, text/plain, */*",
-    "Referer":     "https://impresapiu.subito.it/",
-    "Origin":      "https://impresapiu.subito.it",
-    "x-client-id": "subito-web",
-}
+BASE_DIR      = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+JSON_FILE     = os.path.join(BASE_DIR, "cars.json")
+STATE_FILE    = os.path.join(BASE_DIR, "scraper", "state.json")  # traccia account e crediti
+IMG_DIR       = os.path.join(BASE_DIR, "img")
+# ─────────────────────────────────────────────────────────────
 
 
-def fetch_json(url):
-    req = urllib.request.Request(url, headers=HEADERS)
-    with urllib.request.urlopen(req, timeout=20) as r:
+# ── Gestione stato account ────────────────────────────────────
+
+def load_state():
+    try:
+        with open(STATE_FILE) as f:
+            return json.load(f)
+    except Exception:
+        return {"account_index": 0, "credits_used": {a[0]: 0 for a in ACCOUNTS}}
+
+def save_state(state):
+    os.makedirs(os.path.dirname(STATE_FILE), exist_ok=True)
+    with open(STATE_FILE, "w") as f:
+        json.dump(state, f, indent=2)
+
+def get_account(state):
+    """Restituisce (user, pass) dell'account corrente, ruotando se necessario."""
+    idx = state.get("account_index", 0)
+    # Se l'account corrente ha quasi esaurito i crediti (>450), passa al prossimo
+    current_user = ACCOUNTS[idx][0]
+    if state["credits_used"].get(current_user, 0) >= 450:
+        idx = (idx + 1) % len(ACCOUNTS)
+        state["account_index"] = idx
+        print(f"  🔄 Rotazione account → {ACCOUNTS[idx][0]}")
+    return ACCOUNTS[idx], state
+
+# ── Chiamata API ──────────────────────────────────────────────
+
+def scraping_bot_call(url, account, use_chrome=False):
+    user, pwd = account
+    auth = base64.b64encode(f"{user}:{pwd}".encode()).decode()
+    payload = json.dumps({
+        "url": url,
+        "options": {
+            "useChrome":              use_chrome,
+            "premiumProxy":           True,
+            "proxyCountry":           "IT",
+            "waitForNetworkRequests": use_chrome,
+        }
+    }).encode()
+    req = urllib.request.Request(
+        API_URL, data=payload,
+        headers={"Authorization": f"Basic {auth}", "Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=60) as r:
         return json.loads(r.read().decode())
 
+# ── Utilità ───────────────────────────────────────────────────
 
-def download_image(url: str, car_id: str) -> str:
+def extract_id(url):
+    m = re.search(r'-(\d+)\.htm', url)
+    return m.group(1) if m else ""
+
+def load_cars():
+    try:
+        with open(JSON_FILE) as f:
+            return json.load(f)
+    except Exception:
+        return {"success": True, "cars": []}
+
+def download_image(url, car_id):
+    """Scarica immagine con Referer subito.it — bypassa il blocco CDN."""
     if not url:
         return ""
     os.makedirs(IMG_DIR, exist_ok=True)
     filename = f"{car_id}.jpg"
     filepath = os.path.join(IMG_DIR, filename)
-    # Salta se già scaricata nelle ultime 24h
     if os.path.exists(filepath):
-        age = datetime.now().timestamp() - os.path.getmtime(filepath)
-        if age < 86400:
-            print(f"    ♻️  {filename} già presente, skip")
-            return f"./img/{filename}"
+        print(f"    ♻️  {filename} già presente")
+        return f"./img/{filename}"
     try:
-        req = urllib.request.Request(url, headers={
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
+        dl_url = url.replace("fullscreen-1x-auto", "large-auto").replace("bigthumbs-auto", "large-auto")
+        req = urllib.request.Request(dl_url, headers={
+            "User-Agent": "Mozilla/5.0 Chrome/120.0.0.0",
             "Referer":    "https://www.subito.it/",
-            "Accept":     "image/webp,image/apng,image/*,*/*;q=0.8",
+            "Accept":     "image/webp,image/apng,image/*,*/*",
         })
         with urllib.request.urlopen(req, timeout=20) as r:
             data = r.read()
@@ -57,180 +114,212 @@ def download_image(url: str, car_id: str) -> str:
         print(f"    ✅ {filename} ({len(data)//1024}KB)")
         return f"./img/{filename}"
     except Exception as e:
-        print(f"    ❌ {car_id}: {e}")
+        print(f"    ❌ Download fallito ({car_id}): {e}")
         return ""
 
+def format_price(value):
+    try:
+        return f"{int(float(value)):,}".replace(",", ".") + " €"
+    except Exception:
+        return str(value)
 
-def parse_date(item):
-    """Formatta la data in italiano: Oggi, Ieri, 23 Apr..."""
-    date_str = item.get("date", "")
+def format_date(date_str):
     if not date_str:
         return ""
     try:
         from datetime import date
-        dt = datetime.fromisoformat(date_str.replace("Z",""))
-        today = date.today()
+        dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+        today = datetime.now(timezone.utc).date()
         d = dt.date()
-        if d == today:
-            return "Oggi"
-        elif (today - d).days == 1:
-            return "Ieri"
-        else:
-            mesi = ["","Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"]
-            return f"{d.day} {mesi[d.month]}"
+        diff = (today - d).days
+        if diff == 0: return "Oggi"
+        if diff == 1: return "Ieri"
+        mesi = ["","Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"]
+        return f"{d.day} {mesi[d.month]}"
     except Exception:
         return date_str[:10]
 
+# ── Estrai URL annunci dalla risposta della pagina negozio ────
 
-def extract_feature(features, key):
-    """Estrae un valore dalle feature Subito (km, anno, carburante, cambio)"""
-    if not features:
-        return ""
-    for f in features:
-        if f.get("uri","").endswith(f"/{key}") or f.get("label","").lower() == key.lower():
-            vals = f.get("values", [])
-            if vals:
-                return vals[0].get("key", vals[0].get("label",""))
-    return ""
+def extract_ad_urls(shop_response):
+    d = shop_response.get("data", shop_response)
+    urls = []
 
+    # Caso A: lista "products" con siteURL
+    if isinstance(d.get("products"), list):
+        for p in d["products"]:
+            u = p.get("siteURL") or p.get("url","")
+            if u and re.search(r'subito\.it/auto/.+-\d+\.htm', u):
+                urls.append(u)
+
+    # Caso B: lista "links"
+    if not urls and isinstance(d.get("links"), list):
+        for lnk in d["links"]:
+            href = lnk.get("href","") if isinstance(lnk, dict) else str(lnk)
+            if re.search(r'subito\.it/auto/.+-\d+\.htm', href):
+                urls.append(href)
+
+    # Caso C: parsing HTML grezzo
+    if not urls:
+        html = d.get("siteHtml","") or d.get("html","") or ""
+        if html:
+            found = re.findall(r'https://www\.subito\.it/auto/[^\s"\'<>]+\.htm', html)
+            urls = list(dict.fromkeys(found))
+
+    # Dedup
+    return list(dict.fromkeys(urls))
+
+
+# ── MAIN ──────────────────────────────────────────────────────
 
 def scrape():
     print(f"\n{'='*60}")
     print(f"AVVIO: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
-    print(f"API:   {API_URL}")
     print(f"{'='*60}\n")
 
-    # --- Tenta prima con l'API hades ---
-    cars_data = []
+    state    = load_state()
+    existing = load_cars()
+    existing_map = {c["url"]: c for c in existing.get("cars", [])}
+    existing_urls = set(existing_map.keys())
+
+    # ── STEP 1: Pagina negozio → lista URL annunci (25 crediti) ──
+    account, state = get_account(state)
+    print(f"→ [STEP 1] Account: {account[0]} | Pagina negozio (25 crediti)...")
     try:
-        print("→ Chiamata API Subito...")
-        data = fetch_json(API_URL)
-        ads = data.get("ads", [])
-        print(f"→ Annunci ricevuti dall'API: {len(ads)}")
-        cars_data = ads
+        shop_resp = scraping_bot_call(SHOP_URL, account, use_chrome=True)
+        state["credits_used"][account[0]] = state["credits_used"].get(account[0], 0) + 25
+        save_state(state)
     except Exception as e:
-        print(f"⚠️  API hades non disponibile: {e}")
-        print("→ Provo endpoint alternativo...")
-
-    # --- Fallback: API di ricerca per venditore ---
-    if not cars_data:
-        try:
-            alt_url = f"https://hades.subito.it/v1/search/classifieds?shp={SHOP_ID}&lim=50&start=0"
-            data = fetch_json(alt_url)
-            cars_data = data.get("ads", [])
-            print(f"→ Annunci (alt): {len(cars_data)}")
-        except Exception as e:
-            print(f"⚠️  Fallback 1 fallito: {e}")
-
-    # --- Fallback 2: API pubblica di ricerca ---
-    if not cars_data:
-        try:
-            alt2 = f"https://api.subito.it/v1/shop/ads/?shp={SHOP_ID}&lim=50&start=0"
-            data = fetch_json(alt2)
-            cars_data = data.get("ads", [])
-            print(f"→ Annunci (alt2): {len(cars_data)}")
-        except Exception as e:
-            print(f"⚠️  Fallback 2 fallito: {e}")
-
-    if not cars_data:
-        print("❌ Nessun annuncio trovato da nessun endpoint API.")
-        print("   Mantengo il cars.json esistente invariato.")
+        print(f"❌ Errore pagina negozio: {e}")
+        print("   Mantengo cars.json invariato.")
         return 0
 
-    # --- Parsing annunci ---
-    cars = []
-    for item in cars_data:
-        try:
-            ad_id   = str(item.get("urn","").split(":")[-1] or item.get("id",""))
-            title   = item.get("subject","") or item.get("title","")
-            url     = item.get("urls",{}).get("default","") or item.get("url","")
-            price_raw = (item.get("features",[]) or [])
-            
-            # Prezzo
-            price = ""
-            prices = item.get("prices", {})
-            if prices:
-                v = prices.get("EUR",{}).get("value") or prices.get("value")
-                if v:
-                    price = f"{int(v):,}".replace(",",".") + " €"
-            if not price:
-                for f in (item.get("features") or []):
-                    if "price" in f.get("uri","").lower():
-                        vals = f.get("values",[])
-                        if vals: price = vals[0].get("label","")
+    live_urls = extract_ad_urls(shop_resp)
+    print(f"   URL annunci trovati: {len(live_urls)}")
 
-            # Immagine (prende la prima disponibile, formato large)
-            image_url = ""
-            images = item.get("images",[])
-            if images:
-                img = images[0]
-                # Preferisce large, poi medium, poi quello che c'è
-                image_url = (img.get("large") or img.get("medium") or
-                             img.get("url","")).strip()
-                # Normalizza al formato che ci ha dato l'utente
-                if image_url and "rule=" not in image_url:
-                    image_url += "?rule=large-auto"
-                elif image_url:
-                    image_url = image_url.replace("bigthumbs-auto","large-auto").replace("thumbs-auto","large-auto")
+    if not live_urls:
+        # Fallback: usa gli URL esistenti per almeno aggiornare le immagini mancanti
+        live_urls = list(existing_urls)
+        print(f"   ⚠️  Nessun URL dalla pagina, uso {len(live_urls)} URL esistenti")
 
-            # Data
-            publish_date = parse_date(item)
+    # ── Confronto: quali sono nuove? quali sono sparite? ──
+    live_set    = set(live_urls)
+    new_urls    = live_set - existing_urls          # auto nuove → da scaricare
+    removed_urls = existing_urls - live_set         # auto vendute → da rimuovere
+    same_urls   = live_set & existing_urls          # invariate → mantieni
 
-            # Feature tecniche auto
-            features = item.get("features",[])
-            km           = extract_feature(features, "km")
-            year         = extract_feature(features, "anno")
-            fuel         = extract_feature(features, "carburante")
-            transmission = extract_feature(features, "cambio")
+    print(f"\n   📊 Stato annunci:")
+    print(f"      Nuove:    {len(new_urls)}")
+    print(f"      Invariate:{len(same_urls)}")
+    print(f"      Rimosse:  {len(removed_urls)}")
 
-            # Fallback feature con labels italiani
-            if not km or not year:
-                for f in features:
-                    label = f.get("label","").lower()
-                    vals  = f.get("values",[])
-                    val   = vals[0].get("label","") if vals else ""
-                    if "chilometri" in label or "km" in label: km = val
-                    elif "anno" in label: year = val
-                    elif "carburante" in label: fuel = val
-                    elif "cambio" in label: transmission = val
+    if removed_urls:
+        print(f"\n   🗑️  Auto vendute/rimosse:")
+        for u in removed_urls:
+            print(f"      - {existing_map[u].get('title','?')}")
 
-            if not ad_id or not title:
+    # ── STEP 2: Scarica dati solo per le auto NUOVE ──
+    new_cars = []
+    if new_urls:
+        print(f"\n→ [STEP 2] Scarico {len(new_urls)} auto nuove...")
+        for url in new_urls:
+            car_id = extract_id(url)
+            if not car_id:
                 continue
 
-            print(f"  [{ad_id}] {title} — {price}")
-            print(f"    img: {image_url[:70] if image_url else '(nessuna)'}")
+            # Ruota account se necessario
+            account, state = get_account(state)
+            print(f"\n  Auto: {url}")
+            print(f"  Account: {account[0]} ({state['credits_used'].get(account[0],0)} crediti usati)")
 
-            local_image = download_image(image_url, ad_id)
+            try:
+                resp = scraping_bot_call(url, account, use_chrome=False)
+                state["credits_used"][account[0]] = state["credits_used"].get(account[0], 0) + 25
+                save_state(state)
+                time.sleep(1)
+            except Exception as e:
+                print(f"  ❌ Errore: {e}")
+                continue
 
-            cars.append({
-                "id":           ad_id,
-                "url":          url,
-                "title":        title,
-                "price":        price,
-                "imageUrl":     image_url,
-                "localImage":   local_image,
-                "publishDate":  publish_date,
-                "km":           km,
-                "year":         year,
-                "fuel":         fuel,
-                "transmission": transmission,
+            ad = resp.get("data", resp)
+
+            title   = ad.get("title","") or ad.get("subject","")
+            price_v = ad.get("price", 0)
+            price   = format_price(price_v) if price_v else ""
+            img_url = ad.get("image","")
+            if not img_url and ad.get("images"):
+                img_url = ad["images"][0]
+
+            local_img = download_image(img_url, car_id)
+
+            # Dati tecnici dalla description se non disponibili direttamente
+            km = fuel = transmission = year = ""
+            desc = (ad.get("description","") or "").lower()
+            m = re.search(r'(\d{1,3}(?:[.,]\d{3})*)\s*km', desc)
+            if m: km = m.group(0).strip()
+            m = re.search(r'\b(20\d{2})\b', desc)
+            if m: year = m.group(1)
+            for f_word in ["diesel","benzina","gpl","ibrido","elettrico","hybrid"]:
+                if f_word in desc: fuel = f_word.capitalize(); break
+            for t_word in ["automatico","manuale"]:
+                if t_word in desc: transmission = t_word.capitalize(); break
+
+            print(f"  ✔ {title} | {price} | km:{km} | {year} | {fuel} | {transmission}")
+
+            new_cars.append({
+                "id": car_id, "url": url, "title": title,
+                "price": price, "imageUrl": img_url, "localImage": local_img,
+                "publishDate": "Oggi", "km": km, "year": year,
+                "fuel": fuel, "transmission": transmission,
             })
+    else:
+        print("\n→ Nessuna auto nuova. Zero crediti aggiuntivi spesi. ✨")
 
-        except Exception as e:
-            print(f"  ⚠️  Errore parsing annuncio: {e}")
-            continue
+    # ── STEP 3: Controlla immagini mancanti nelle auto esistenti ──
+    # (succede se la run precedente ha fallito il download)
+    fixed = 0
+    for url in same_urls:
+        car = existing_map[url]
+        local = car.get("localImage","")
+        if not local or not os.path.exists(os.path.join(BASE_DIR, local.lstrip("./"))):
+            car_id = extract_id(url)
+            print(f"\n→ Immagine mancante per {car.get('title','?')}, scarico...")
+            car["localImage"] = download_image(car.get("imageUrl",""), car_id)
+            fixed += 1
+    if fixed:
+        print(f"   ✅ Recuperate {fixed} immagini mancanti")
+
+    # ── Assembla lista finale (nuove + invariate, senza le rimosse) ──
+    final_cars = new_cars + [existing_map[u] for u in same_urls]
+
+    # Ordina per publishDate (Oggi prima, poi le altre)
+    def sort_key(c):
+        pd = c.get("publishDate","")
+        if pd == "Oggi": return "0"
+        if pd == "Ieri": return "1"
+        return pd
+    final_cars.sort(key=sort_key)
 
     output = {
         "success": True,
         "updated": datetime.now(timezone.utc).isoformat(),
-        "count":   len(cars),
-        "cars":    cars,
+        "count":   len(final_cars),
+        "cars":    final_cars,
     }
-    with open(OUTPUT_JSON, "w", encoding="utf-8") as f:
+    with open(JSON_FILE, "w", encoding="utf-8") as f:
         json.dump(output, f, ensure_ascii=False, indent=2)
 
-    print(f"\n✅ COMPLETATO: {len(cars)} auto salvate in cars.json")
-    return len(cars)
+    # Riepilogo crediti
+    print(f"\n{'='*60}")
+    print(f"✅ COMPLETATO: {len(final_cars)} auto nel sito")
+    print(f"💳 Crediti usati per account:")
+    for user, pwd in ACCOUNTS:
+        used = state["credits_used"].get(user, 0)
+        remaining = 500 - used
+        bar = "█" * (used // 50) + "░" * ((500 - used) // 50)
+        print(f"   {user:15s} {bar} {used:3d}/500 (rimasti: {remaining})")
+    print(f"{'='*60}\n")
+    return len(final_cars)
 
 
 if __name__ == "__main__":
