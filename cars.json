@@ -1,0 +1,91 @@
+{
+  "success": true,
+  "updated": "2025-04-28T07:00:00.000Z",
+  "count": 7,
+  "cars": [
+    {
+      "id": "644877124",
+      "url": "https://www.subito.it/auto/audi-q3-2-0-tdi-150-cv-quattro-s-tronic-edition-sp-bari-644877124.htm",
+      "title": "Audi Q3 2.0 TDI 150 CV quattro S tronic edition Sp",
+      "price": "14.500 €",
+      "imageUrl": "https://images.sbito.it/api/v1/sbt-ads-images-pro/images/25/25e50513-539f-4caf-9c09-0224e2789500?rule=large-auto",
+      "publishDate": "Oggi",
+      "km": "190.000 km - 199.999 km",
+      "year": "2016",
+      "fuel": "Diesel",
+      "transmission": "Automatico"
+    },
+    {
+      "id": "644870587",
+      "url": "https://www.subito.it/auto/citroen-c1-1-0-5-porte-seduction-bari-644870587.htm",
+      "title": "Citroen C1 1.0 5 porte Seduction",
+      "price": "5.500 €",
+      "imageUrl": "https://images.sbito.it/api/v1/sbt-ads-images-pro/images/86/860e6abb-15be-46de-abc7-8034db476b38?rule=large-auto",
+      "publishDate": "Oggi",
+      "km": "110.000 km - 119.999 km",
+      "year": "2012",
+      "fuel": "Benzina",
+      "transmission": "Manuale"
+    },
+    {
+      "id": "644479824",
+      "url": "https://www.subito.it/auto/opel-astra-1-4-turbo-140cv-5-porte-gpl-tech-cosmo-bari-644479824.htm",
+      "title": "Opel Astra 1.4 Turbo 140CV 5 porte GPL Tech Cosmo",
+      "price": "6.500 €",
+      "imageUrl": "https://images.sbito.it/api/v1/sbt-ads-images-pro/images/82/822dc603-1e7d-496a-bca2-95cb3e127bd2?rule=large-auto",
+      "publishDate": "23 Apr",
+      "km": "150.000 km - 159.999 km",
+      "year": "2015",
+      "fuel": "Gpl",
+      "transmission": "Manuale"
+    },
+    {
+      "id": "642608133",
+      "url": "https://www.subito.it/auto/alfa-romeo-giulietta-1-6-jtdm-2-120-cv-progression-bari-642608133.htm",
+      "title": "Alfa Romeo Giulietta 1.6 JTDm-2 120 CV Progression",
+      "price": "8.900 €",
+      "imageUrl": "https://images.sbito.it/api/v1/sbt-ads-images-pro/images/fa/faf691f1-b89c-4036-9168-3f395b28c364?rule=large-auto",
+      "publishDate": "09 Apr",
+      "km": "150.000 km - 159.999 km",
+      "year": "2016",
+      "fuel": "Diesel",
+      "transmission": "Manuale"
+    },
+    {
+      "id": "641450379",
+      "url": "https://www.subito.it/auto/mercedes-benz-a-180-d-premium-bari-641450379.htm",
+      "title": "Mercedes-Benz A 180 d Premium",
+      "price": "13.900 €",
+      "imageUrl": "https://images.sbito.it/api/v1/sbt-ads-images-pro/images/52/52fa2606-a613-4dc8-bc52-2a399eb0975d?rule=large-auto",
+      "publishDate": "30 Mar",
+      "km": "170.000 km - 179.999 km",
+      "year": "2018",
+      "fuel": "Diesel",
+      "transmission": "Manuale"
+    },
+    {
+      "id": "641347905",
+      "url": "https://www.subito.it/auto/peugeot-3008-bluehdi-130-s-s-allure-bari-641347905.htm",
+      "title": "Peugeot 3008 BlueHDi 130 S&S Allure",
+      "price": "15.900 €",
+      "imageUrl": "https://images.sbito.it/api/v1/sbt-ads-images-pro/images/32/324871c4-4627-4021-a3a0-2eee8538f617?rule=large-auto",
+      "publishDate": "29 Mar",
+      "km": "140.000 km - 149.999 km",
+      "year": "2019",
+      "fuel": "Diesel",
+      "transmission": "Automatico"
+    },
+    {
+      "id": "634899845",
+      "url": "https://www.subito.it/auto/peugeot-3008-bluehdi-130-s-s-allure-bari-634899845.htm",
+      "title": "Peugeot 3008 BlueHDi 130 S&S Allure",
+      "price": "15.900 €",
+      "imageUrl": "https://images.sbito.it/api/v1/sbt-ads-images-pro/images/23/231ab67d-e811-40f1-9176-a11eeb432dbd?rule=large-auto",
+      "publishDate": "24 Feb",
+      "km": "140.000 km - 149.999 km",
+      "year": "2019",
+      "fuel": "Diesel",
+      "transmission": "Automatico"
+    }
+  ]
+}

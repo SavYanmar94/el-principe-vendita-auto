@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vendita Auto Usate – El Principe Garage</title>
+  <meta name="description" content="Auto usate in vendita da El Principe Garage a Modugno (BA)." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&family=Lato:wght@300;400;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --yellow: #FFC801;
+      --yellow-dark: #e0b000;
+      --black: #111111;
+      --white: #ffffff;
+      --offwhite: #f5f5f5;
+      --gray: #e0e0e0;
+      --text: #222222;
+      --text-light: #666666;
+      --shadow: 0 2px 12px rgba(0,0,0,0.10);
+      --radius: 6px;
+    }
+    html { scroll-behavior: smooth; }
+    body { font-family: 'Lato', sans-serif; background: var(--white); color: var(--text); }
+
+    /* HEADER */
+    header {
+      background: var(--black);
+      height: 70px;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 clamp(1rem, 6vw, 5rem);
+      position: sticky; top: 0; z-index: 100;
+    }
+    .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+    .logo img { height: 44px; width: auto; object-fit: contain; }
+    .logo-fallback {
+      font-family: 'Oswald', sans-serif;
+      font-size: 1.3rem; color: var(--yellow); letter-spacing: .06em;
+    }
+    nav { display: flex; gap: 1.8rem; align-items: center; }
+    nav a {
+      font-family: 'Oswald', sans-serif; font-size: 0.82rem;
+      font-weight: 400; letter-spacing: 0.14em; text-transform: uppercase;
+      color: #aaa; text-decoration: none; transition: color .2s;
+    }
+    nav a:hover { color: var(--white); }
+    nav a.active { color: var(--white); border-bottom: 2px solid var(--yellow); padding-bottom: 2px; }
+
+    /* HERO */
+    .hero {
+      position: relative; min-height: 240px;
+      display: flex; align-items: center; overflow: hidden; background: var(--black);
+    }
+    .hero-bg {
+      position: absolute; inset: 0;
+      background-image: url('https://raw.githubusercontent.com/TONOMIO/elprincipe-auto/main/background.png');
+      background-size: cover; background-position: center;
+      filter: brightness(0.28);
+    }
+    .hero-content { position: relative; z-index: 1; padding: 3rem clamp(1rem, 6vw, 5rem); }
+    .hero h1 {
+      font-family: 'Oswald', sans-serif;
+      font-size: clamp(2.4rem, 5vw, 3.8rem);
+      font-weight: 700; color: var(--white);
+      text-transform: uppercase; line-height: 1.1;
+    }
+    .hero h1 span { color: var(--yellow); }
+
+    /* INTRO */
+    .intro {
+      text-align: center; padding: 3rem clamp(1rem, 12vw, 22%);
+      border-bottom: 1px solid var(--gray);
+    }
+    .intro h2 {
+      font-family: 'Oswald', sans-serif; font-size: 1rem;
+      font-weight: 600; letter-spacing: 0.22em; text-transform: uppercase; margin-bottom: 1rem;
+    }
+    .intro p { font-size: 0.93rem; color: var(--text-light); line-height: 1.8; }
+
+    /* STATUS */
+    .status-bar {
+      background: var(--offwhite); border-bottom: 1px solid var(--gray);
+      padding: 0.6rem clamp(1rem, 6vw, 5rem);
+      display: flex; align-items: center; gap: 1rem;
+      font-size: 0.78rem; color: var(--text-light); flex-wrap: wrap;
+    }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: #ccc; display: inline-block; }
+    .dot.green { background: #22c55e; box-shadow: 0 0 5px #22c55e88; }
+    .dot.loading { background: var(--yellow); animation: blink 1s infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+    #status-count { font-weight: 700; color: var(--text); }
+    .btn-refresh {
+      margin-left: auto; background: transparent; border: 1px solid var(--gray);
+      color: var(--text-light); padding: 4px 12px; border-radius: var(--radius);
+      font-size: 0.75rem; font-family: 'Lato', sans-serif; cursor: pointer;
+      display: flex; align-items: center; gap: 5px; transition: all .2s;
+    }
+    .btn-refresh:hover { border-color: var(--yellow); color: var(--text); }
+
+    /* GRID */
+    .grid-section { padding: 2.5rem clamp(1rem, 6vw, 5rem) 5rem; }
+    .cars-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 1.6rem;
+    }
+
+    /* CARD */
+    .car-card {
+      background: var(--white); border: 1px solid var(--gray);
+      border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow);
+      display: flex; flex-direction: column; text-decoration: none; color: inherit;
+      transition: box-shadow .25s, transform .25s;
+      animation: up .35s ease both;
+    }
+    .car-card:hover { box-shadow: 0 8px 28px rgba(0,0,0,0.16); transform: translateY(-3px); }
+    @keyframes up { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+    .car-card:nth-child(1){animation-delay:.04s} .car-card:nth-child(2){animation-delay:.08s}
+    .car-card:nth-child(3){animation-delay:.12s} .car-card:nth-child(4){animation-delay:.16s}
+    .car-card:nth-child(5){animation-delay:.20s} .car-card:nth-child(6){animation-delay:.24s}
+    .car-card:nth-child(7){animation-delay:.28s} .car-card:nth-child(8){animation-delay:.32s}
+
+    .card-img-wrap {
+      position: relative; aspect-ratio: 4/3;
+      overflow: hidden; background: #eee;
+    }
+    .card-img-wrap img {
+      width: 100%; height: 100%; object-fit: cover; display: block;
+      transition: transform .4s ease;
+    }
+    .car-card:hover .card-img-wrap img { transform: scale(1.04); }
+    .card-btn {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      background: var(--yellow); color: var(--black);
+      font-family: 'Oswald', sans-serif; font-size: 0.82rem;
+      font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+      text-align: center; padding: 10px 0; transition: background .2s;
+    }
+    .car-card:hover .card-btn { background: var(--yellow-dark); }
+    .no-img {
+      width:100%; height:100%; display:flex; align-items:center;
+      justify-content:center; font-size:3rem; background:#f0f0f0; color:#ccc;
+    }
+
+    .card-body { padding: 1rem 1.1rem 1.2rem; flex: 1; }
+    .card-title {
+      font-family: 'Oswald', sans-serif; font-size: 1rem;
+      font-weight: 600; color: var(--text); line-height: 1.3; margin-bottom: 6px;
+    }
+    .card-price {
+      font-family: 'Oswald', sans-serif; font-size: 1.25rem;
+      font-weight: 700; color: var(--yellow); margin-bottom: 10px;
+    }
+    .card-specs { display: flex; flex-wrap: wrap; gap: 5px; }
+    .spec-tag {
+      background: var(--offwhite); border: 1px solid var(--gray);
+      color: var(--text-light); font-size: 0.71rem; padding: 3px 8px; border-radius: 2px;
+    }
+    .card-date { margin-top: 8px; font-size: 0.70rem; color: #aaa; }
+
+    /* SKELETON */
+    .skeleton {
+      background: var(--white); border: 1px solid var(--gray);
+      border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow);
+    }
+    .skel-img { aspect-ratio:4/3; background:linear-gradient(90deg,#f0f0f0 25%,#e4e4e4 50%,#f0f0f0 75%); background-size:200% 100%; animation:sh 1.3s infinite; }
+    .skel-body { padding:1rem; display:flex; flex-direction:column; gap:8px; }
+    .skel-line { height:13px; border-radius:3px; background:linear-gradient(90deg,#f0f0f0 25%,#e4e4e4 50%,#f0f0f0 75%); background-size:200% 100%; animation:sh 1.3s infinite; }
+    .skel-line.lg{height:18px;width:75%} .skel-line.sm{height:10px;width:45%}
+    @keyframes sh{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+    /* MSG */
+    .msg-box { grid-column:1/-1; text-align:center; padding:4rem 2rem; color:var(--text-light); }
+    .msg-box .icon{font-size:3rem;margin-bottom:1rem}
+    .msg-box h3{font-family:'Oswald',sans-serif;font-size:1.2rem;color:var(--text);margin-bottom:.5rem}
+    .msg-box a{color:var(--yellow)}
+
+    /* FOOTER */
+    footer {
+      background: var(--black); padding: 2.5rem clamp(1rem, 6vw, 5rem);
+      display: flex; flex-wrap: wrap; gap: 1.5rem;
+      justify-content: space-between; align-items: center;
+    }
+    .footer-logo { display:flex; align-items:center; gap:10px; }
+    .footer-logo img { height: 36px; }
+    .footer-logo span { font-family:'Oswald',sans-serif; font-size:1.1rem; color:var(--white); }
+    footer p { font-size: 0.78rem; color: #666; }
+    footer a { color: #888; text-decoration: none; }
+    footer a:hover { color: var(--yellow); }
+
+    @media(max-width:640px){ nav{display:none} .cars-grid{grid-template-columns:1fr 1fr;gap:1rem} }
+    @media(max-width:400px){ .cars-grid{grid-template-columns:1fr} }
+  </style>
+</head>
+<body>
+
+  <header>
+    <a class="logo" href="https://elprincipegarage.com" target="_blank">
+      <img src="https://raw.githubusercontent.com/TONOMIO/elprincipe-auto/main/logo.png"
+           alt="El Principe Garage"
+           onerror="this.style.display='none';document.getElementById('logo-fb').style.display='block'">
+      <span id="logo-fb" class="logo-fallback" style="display:none">♛ El Principe</span>
+    </a>
+    <nav>
+      <a href="https://elprincipegarage.com" target="_blank">Home</a>
+      <a href="https://elprincipegarage.com/chi-siamo" target="_blank">Chi siamo</a>
+      <a href="https://elprincipegarage.com/servizi" target="_blank">Servizi</a>
+      <a href="#" class="active">Vendita Auto</a>
+      <a href="https://elprincipegarage.com/contatti" target="_blank">Contatti</a>
+    </nav>
+  </header>
+
+  <section class="hero">
+    <div class="hero-bg"></div>
+    <div class="hero-content">
+      <h1>Modelli Vendita<br>Auto <span>Usato</span></h1>
+    </div>
+  </section>
+
+  <section class="intro">
+    <h2>Le nostre occasioni</h2>
+    <p>Pur avendo diversi servizi legati al garage, la nostra attività ha a che fare ogni settimana
+    con diversi affari nella compravendita di auto usate. Controlla su questa pagina le occasioni
+    disponibili. Clicca sulle auto per scoprire tutti i dettagli. Qualora tu fossi interessato
+    all'acquisto contattaci via telefono, troverai il numero in basso alla pagina.</p>
+  </section>
+
+  <div class="status-bar">
+    <span class="dot loading" id="sdot"></span>
+    <span id="smsg">Caricamento…</span>
+    <span id="scnt"></span>
+    <span id="stime"></span>
+    <button class="btn-refresh" onclick="loadCars()">↻ Aggiorna</button>
+  </div>
+
+  <section class="grid-section">
+    <div class="cars-grid" id="grid">
+      <div class="skeleton"><div class="skel-img"></div><div class="skel-body"><div class="skel-line lg"></div><div class="skel-line"></div><div class="skel-line sm"></div></div></div>
+      <div class="skeleton"><div class="skel-img"></div><div class="skel-body"><div class="skel-line lg"></div><div class="skel-line"></div><div class="skel-line sm"></div></div></div>
+      <div class="skeleton"><div class="skel-img"></div><div class="skel-body"><div class="skel-line lg"></div><div class="skel-line"></div><div class="skel-line sm"></div></div></div>
+      <div class="skeleton"><div class="skel-img"></div><div class="skel-body"><div class="skel-line lg"></div><div class="skel-line"></div><div class="skel-line sm"></div></div></div>
+    </div>
+  </section>
+
+  <footer>
+    <div>
+      <div class="footer-logo">
+        <img src="https://raw.githubusercontent.com/TONOMIO/elprincipe-auto/main/logo.png"
+             alt="El Principe" onerror="this.style.display='none'">
+        <span>El Principe Garage</span>
+      </div>
+      <p style="margin-top:6px">Via Pordenone 17, Modugno (BA) · <a href="tel:+393201664894">+39 320 166 4894</a></p>
+    </div>
+    <p style="font-size:.75rem;color:#555">Annunci aggiornati automaticamente da Subito.it ogni giorno</p>
+  </footer>
+
+  <script>
+    function buildCard(car) {
+      const a = document.createElement('a');
+      a.className = 'car-card';
+      a.href = car.url;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+
+      // USA localImage (scaricata dallo scraper) — non ha problemi di blocco CDN
+      const imgSrc = car.localImage || '';
+      const imgHtml = imgSrc
+        ? `<img src="${imgSrc}" alt="${car.title}" loading="lazy"
+               onerror="this.parentElement.innerHTML='<div class=\\'no-img\\'>🚗</div><div class=\\'card-btn\\'>Scopri di più</div>'">`
+        : `<div class="no-img">🚗</div>`;
+
+      const specs = [car.km, car.year, car.fuel, car.transmission]
+        .filter(Boolean).map(s => `<span class="spec-tag">${s}</span>`).join('');
+
+      a.innerHTML = `
+        <div class="card-img-wrap">
+          ${imgHtml}
+          <div class="card-btn">Scopri di più</div>
+        </div>
+        <div class="card-body">
+          <div class="card-title">${car.title}</div>
+          <div class="card-price">${car.price}</div>
+          <div class="card-specs">${specs}</div>
+          ${car.publishDate ? `<div class="card-date">${car.publishDate}</div>` : ''}
+        </div>`;
+      return a;
+    }
+
+    async function loadCars() {
+      const grid = document.getElementById('grid');
+      const dot  = document.getElementById('sdot');
+      const msg  = document.getElementById('smsg');
+      const cnt  = document.getElementById('scnt');
+      const time = document.getElementById('stime');
+
+      grid.innerHTML = Array(4).fill(`<div class="skeleton"><div class="skel-img"></div><div class="skel-body"><div class="skel-line lg"></div><div class="skel-line"></div><div class="skel-line sm"></div></div></div>`).join('');
+      dot.className = 'dot loading';
+      msg.textContent = 'Caricamento…'; cnt.textContent = ''; time.textContent = '';
+
+      try {
+        const res  = await fetch('./cars.json?t=' + Date.now());
+        const data = await res.json();
+        grid.innerHTML = '';
+
+        if (!data.success || !data.cars?.length) {
+          grid.innerHTML = `<div class="msg-box"><div class="icon">🚗</div><h3>Nessun annuncio disponibile</h3><p>Consulta <a href="https://impresapiu.subito.it/shops/54233-el-principe-di-bavaro-biagio" target="_blank">la nostra pagina Subito.it →</a></p></div>`;
+          dot.className = 'dot'; return;
+        }
+
+        data.cars.forEach(car => grid.appendChild(buildCard(car)));
+        dot.className = 'dot green';
+        msg.textContent = 'Annunci aggiornati';
+        cnt.textContent = data.cars.length + ' auto disponibili';
+        if (data.updated) {
+          const d = new Date(data.updated);
+          time.textContent = 'Aggiornato: ' + d.toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'});
+        }
+      } catch(err) {
+        grid.innerHTML = `<div class="msg-box"><div class="icon">⚠️</div><h3>Errore caricamento</h3><p><a href="https://impresapiu.subito.it/shops/54233-el-principe-di-bavaro-biagio" target="_blank">Vedi su Subito.it →</a></p></div>`;
+        dot.className = 'dot'; console.error(err);
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', loadCars);
+  </script>
+</body>
+</html>
