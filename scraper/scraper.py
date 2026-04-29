@@ -1,19 +1,13 @@
 """
 scraper.py - El Principe Garage
-
-LOGICA:
-1. Playwright (browser reale) → legge la pagina negozio, estrae tutti i dati delle auto
-   Questo funzionava già prima - lo rimettiamo.
-2. ScrapingBot → usato SOLO per scaricare l'immagine delle auto NUOVE
-   (25 crediti per auto nuova, 0 crediti se l'auto esiste già)
-3. Le auto già presenti con immagine non vengono mai ri-toccate
+Playwright legge la pagina negozio → estrae auto
+ScrapingBot usato SOLO come fallback per immagini
 """
 
-import asyncio, json, os, time, urllib.request, base64, re
+import asyncio, json, os, urllib.request, base64, re, time
 from datetime import datetime, timezone
 from playwright.async_api import async_playwright
 
-# ── CONFIG ───────────────────────────────────────────────────
 ACCOUNTS = [
     ("SavYanmar94",  "Yl5MgMO0oULolQpbXSl4IOoz1"),
     ("Domi28",       "tEBA2RkLkIzi0I6mFn3yhE80D"),
@@ -28,7 +22,6 @@ BASE_DIR  = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 JSON_FILE = os.path.join(BASE_DIR, "cars.json")
 STATE_FILE= os.path.join(BASE_DIR, "scraper", "state.json")
 IMG_DIR   = os.path.join(BASE_DIR, "img")
-# ─────────────────────────────────────────────────────────────
 
 def load_state():
     try:
@@ -44,7 +37,7 @@ def get_account(state):
     if state["credits_used"].get(ACCOUNTS[idx][0], 0) >= 450:
         idx = (idx + 1) % len(ACCOUNTS)
         state["account_index"] = idx
-        print(f"  🔄 Rotazione account → {ACCOUNTS[idx][0]}")
+        print(f"  ROTAZIONE account -> {ACCOUNTS[idx][0]}")
     return ACCOUNTS[idx], state
 
 def load_cars():
@@ -56,44 +49,36 @@ def extract_id(url):
     m = re.search(r'-(\d+)\.htm', url)
     return m.group(1) if m else ""
 
-def format_price(v):
-    try: return f"{int(float(v)):,}".replace(",", ".") + " €"
-    except: return str(v)
-
 def download_image_direct(url, car_id):
-    """Scarica immagine direttamente con Referer subito.it (gratis, no crediti)."""
     if not url: return ""
     os.makedirs(IMG_DIR, exist_ok=True)
     filename = f"{car_id}.jpg"
     filepath = os.path.join(IMG_DIR, filename)
     if os.path.exists(filepath):
-        print(f"    ♻️  {filename} già presente")
+        print(f"    [IMG] {filename} gia presente, skip")
         return f"./img/{filename}"
     try:
         dl_url = url.replace("fullscreen-1x-auto","large-auto").replace("bigthumbs-auto","large-auto")
+        print(f"    [IMG] Download diretto: {dl_url[:80]}")
         req = urllib.request.Request(dl_url, headers={
             "User-Agent": "Mozilla/5.0 Chrome/120.0.0.0",
-            "Referer":    "https://www.subito.it/",
-            "Accept":     "image/webp,image/apng,image/*,*/*",
+            "Referer": "https://www.subito.it/",
+            "Accept": "image/webp,image/apng,image/*,*/*",
         })
         with urllib.request.urlopen(req, timeout=20) as r: data = r.read()
         with open(filepath, "wb") as f: f.write(data)
-        print(f"    ✅ {filename} ({len(data)//1024}KB) — scaricata direttamente")
+        print(f"    [IMG] OK: {filename} ({len(data)//1024}KB)")
         return f"./img/{filename}"
     except Exception as e:
-        print(f"    ⚠️  Download diretto fallito: {e} — provo ScrapingBot...")
+        print(f"    [IMG] Download diretto FALLITO: {e}")
         return ""
 
-def download_image_scrapingbot(img_url, car_ad_url, car_id, state):
-    """
-    Usa ScrapingBot per ottenere l'immagine quando il download diretto fallisce.
-    Costa 25 crediti. Usato solo come fallback.
-    """
+def download_image_scrapingbot(car_url, car_id, state):
     account, state = get_account(state)
-    print(f"    📡 ScrapingBot ({account[0]}, 25 crediti)...")
+    print(f"    [SBOT] Uso ScrapingBot account={account[0]} per {car_url[:60]}")
     auth = base64.b64encode(f"{account[0]}:{account[1]}".encode()).decode()
     payload = json.dumps({
-        "url": car_ad_url,
+        "url": car_url,
         "options": {"useChrome": False, "premiumProxy": True, "proxyCountry": "IT"}
     }).encode()
     try:
@@ -104,44 +89,73 @@ def download_image_scrapingbot(img_url, car_ad_url, car_id, state):
         state["credits_used"][account[0]] = state["credits_used"].get(account[0], 0) + 25
         save_state(state)
         ad = resp.get("data", resp)
-        new_img_url = ad.get("image","")
-        if not new_img_url and ad.get("images"): new_img_url = ad["images"][0]
-        if new_img_url:
-            # Riprova download diretto con il nuovo URL
-            result = download_image_direct(new_img_url, car_id)
-            if result: return result, new_img_url, state
+        img_url = ad.get("image","")
+        if not img_url and ad.get("images"): img_url = ad["images"][0]
+        print(f"    [SBOT] img_url ricevuto: {img_url[:80] if img_url else '(nessuno)'}")
+        if img_url:
+            local = download_image_direct(img_url, car_id)
+            return local, img_url, state
     except Exception as e:
-        print(f"    ❌ ScrapingBot fallito: {e}")
-    return "", img_url, state
+        print(f"    [SBOT] ERRORE: {e}")
+    return "", "", state
 
 
-async def scrape_with_playwright():
-    """
-    Usa Playwright per leggere la pagina negozio e estrarre TUTTI i dati.
-    Questo funzionava già prima — è il metodo principale.
-    """
-    print("→ Avvio Playwright (browser reale)...")
+async def scrape_playwright():
+    print("\n[PLAYWRIGHT] Avvio browser Chromium headless...")
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True, args=[
-            "--no-sandbox","--disable-setuid-sandbox",
-            "--disable-dev-shm-usage","--disable-gpu"
-        ])
+        browser = await p.chromium.launch(
+            headless=True,
+            args=["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage","--disable-gpu"]
+        )
+        print("[PLAYWRIGHT] Browser avviato OK")
         context = await browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
             locale="it-IT", viewport={"width": 1280, "height": 900}
         )
         page = await context.new_page()
-        print(f"→ Caricamento {SHOP_URL}...")
-        await page.goto(SHOP_URL, wait_until="networkidle", timeout=40000)
-        await asyncio.sleep(3)
+
+        print(f"[PLAYWRIGHT] Navigazione verso: {SHOP_URL}")
+        try:
+            await page.goto(SHOP_URL, wait_until="networkidle", timeout=40000)
+            print("[PLAYWRIGHT] Pagina caricata (networkidle)")
+        except Exception as e:
+            print(f"[PLAYWRIGHT] Timeout networkidle, provo domcontentloaded: {e}")
+            await page.goto(SHOP_URL, wait_until="domcontentloaded", timeout=30000)
+            print("[PLAYWRIGHT] Pagina caricata (domcontentloaded)")
+
+        print("[PLAYWRIGHT] Attendo 4 secondi per JS dinamico...")
+        await asyncio.sleep(4)
+
+        # Log titolo pagina e URL attuale
+        title = await page.title()
+        url_now = page.url
+        print(f"[PLAYWRIGHT] Titolo pagina: {title}")
+        print(f"[PLAYWRIGHT] URL attuale: {url_now}")
+
+        # Conta elementi chiave
+        n_links = await page.evaluate("() => document.querySelectorAll('a[href*=\"/auto/\"]').length")
+        n_imgs  = await page.evaluate("() => document.querySelectorAll('img').length")
+        n_li    = await page.evaluate("() => document.querySelectorAll('li').length")
+        print(f"[PLAYWRIGHT] Link /auto/: {n_links} | img: {n_imgs} | li: {n_li}")
+
+        # Scroll
+        print("[PLAYWRIGHT] Scroll pagina per lazy loading...")
         await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
         await asyncio.sleep(2)
         await page.evaluate("window.scrollTo(0, 0)")
         await asyncio.sleep(1)
 
-        count = await page.evaluate("() => document.querySelectorAll('a[href*=\"/auto/\"]').length")
-        print(f"→ Link /auto/ trovati: {count}")
+        n_links2 = await page.evaluate("() => document.querySelectorAll('a[href*=\"/auto/\"]').length")
+        print(f"[PLAYWRIGHT] Link /auto/ dopo scroll: {n_links2}")
 
+        # Primi 3 link trovati per debug
+        sample = await page.evaluate("""
+            () => Array.from(document.querySelectorAll('a[href*="/auto/"]'))
+                       .slice(0,3).map(a => a.href)
+        """)
+        print(f"[PLAYWRIGHT] Esempi link: {sample}")
+
+        # Estrai auto
         cars_raw = await page.evaluate("""
             () => {
                 const results = [], seen = new Set();
@@ -153,7 +167,7 @@ async def scrape_with_playwright():
                     let card = link;
                     for (let i=0; i<8; i++) { if (!card.parentElement) break; card=card.parentElement; }
                     let title = link.title || link.getAttribute('title') || '';
-                    if (!title) { const h=card.querySelector('h2,h3,[class*="title"]'); title=h?h.innerText.trim():''; }
+                    if (!title) { const h=card.querySelector('h2,h3,[class*="title"],[class*="Title"]'); title=h?h.innerText.trim():''; }
                     if (!title) title = link.innerText.trim().split('\\n')[0].trim();
                     let price='';
                     const pe=card.querySelector('[class*="price"],[class*="Price"]');
@@ -162,8 +176,8 @@ async def scrape_with_playwright():
                     let imageUrl='';
                     card.querySelectorAll('img').forEach(img => {
                         if (!imageUrl) {
-                            const src=img.src||img.dataset.src||'';
-                            if (src && (src.includes('sbito.it')||src.includes('subito'))) {
+                            const src=img.src||img.dataset.src||img.getAttribute('data-original')||'';
+                            if (src&&(src.includes('sbito.it')||src.includes('subito'))) {
                                 imageUrl=src.replace('bigthumbs-auto','large-auto').replace('thumbs-auto','large-auto');
                             }
                         }
@@ -187,68 +201,67 @@ async def scrape_with_playwright():
                 return results;
             }
         """)
+
+        print(f"[PLAYWRIGHT] Auto estratte (titolo+prezzo): {len(cars_raw)}")
+        for c in cars_raw:
+            print(f"  -> [{c['id']}] {c['title']} | {c['price']} | img: {'SI' if c['imageUrl'] else 'NO'}")
+
         await browser.close()
-    print(f"→ Auto estratte da Playwright: {len(cars_raw)}")
+        print("[PLAYWRIGHT] Browser chiuso")
     return cars_raw
 
 
 def scrape():
     print(f"\n{'='*60}")
     print(f"AVVIO: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
+    print(f"Script: {__file__}")
     print(f"{'='*60}\n")
 
     state    = load_state()
     existing = load_cars()
     existing_map = {c["url"]: c for c in existing.get("cars", [])}
 
-    # ── STEP 1: Playwright legge tutte le auto dalla pagina ──
-    cars_raw = asyncio.run(scrape_with_playwright())
+    print("[MAIN] Avvio Playwright...")
+    cars_raw = asyncio.run(scrape_playwright())
 
     if not cars_raw:
-        print("❌ Playwright ha trovato 0 auto. Mantengo cars.json invariato.")
+        print("[MAIN] ATTENZIONE: Playwright ha trovato 0 auto.")
+        print("[MAIN] Possibili cause:")
+        print("  1) La pagina impresapiu.subito.it usa un anti-bot")
+        print("  2) Il layout HTML e' cambiato")
+        print("  3) Errore di rete nel runner GitHub")
+        print("[MAIN] Mantengo cars.json invariato.")
         return 0
 
-    # ── STEP 2: Per ogni auto, gestisci immagine ──
+    print(f"\n[MAIN] Processo {len(cars_raw)} auto...")
     final_cars = []
+
     for car in cars_raw:
         url    = car["url"]
         car_id = car["id"]
         ex     = existing_map.get(url, {})
 
-        # Se l'auto esisteva già e ha già l'immagine → tienila, non sprecare crediti
+        # Auto gia' presente con immagine -> mantieni, aggiorna solo prezzo/data
         if ex.get("localImage") and os.path.exists(
             os.path.join(BASE_DIR, ex["localImage"].lstrip("./"))
         ):
-            # Aggiorna solo prezzo e publishDate (potrebbero essere cambiati)
-            ex["price"]       = car["price"] or ex.get("price","")
-            ex["publishDate"] = car["publishDate"] or ex.get("publishDate","")
+            ex["price"]       = car.get("price") or ex.get("price","")
+            ex["publishDate"] = car.get("publishDate") or ex.get("publishDate","")
             final_cars.append(ex)
-            print(f"  ♻️  {car['title']} — immagine già OK")
+            print(f"  [OK] {car['title']} — immagine gia' presente")
             continue
 
-        # Auto nuova o senza immagine → prova prima download diretto (gratis)
-        print(f"\n  🚗 {car['title']} ({car_id})")
+        # Auto nuova o senza immagine
+        print(f"\n  [NUOVO] {car['title']} ({car_id})")
         local_img = download_image_direct(car.get("imageUrl",""), car_id)
 
-        # Se il download diretto fallisce → usa ScrapingBot (25 crediti)
         if not local_img:
-            local_img, new_img_url, state = download_image_scrapingbot(
-                car.get("imageUrl",""), url, car_id, state
-            )
+            print(f"  [MAIN] Download diretto fallito, provo ScrapingBot...")
+            local_img, new_img_url, state = download_image_scrapingbot(url, car_id, state)
             if new_img_url: car["imageUrl"] = new_img_url
 
         car["localImage"] = local_img
         final_cars.append(car)
-
-    # ── STEP 3: Riepilogo crediti ──
-    print(f"\n{'='*60}")
-    print(f"✅ COMPLETATO: {len(final_cars)} auto nel sito")
-    print(f"💳 Crediti ScrapingBot:")
-    for user, _ in ACCOUNTS:
-        used = state["credits_used"].get(user, 0)
-        bar  = "█"*(used//50) + "░"*((500-used)//50)
-        print(f"   {user:15s} {bar} {used:3d}/500 (rimasti: {500-used})")
-    print(f"{'='*60}\n")
 
     output = {
         "success": True,
@@ -258,8 +271,15 @@ def scrape():
     }
     with open(JSON_FILE, "w", encoding="utf-8") as f:
         json.dump(output, f, ensure_ascii=False, indent=2)
-
     save_state(state)
+
+    print(f"\n{'='*60}")
+    print(f"COMPLETATO: {len(final_cars)} auto salvate in cars.json")
+    print(f"Crediti ScrapingBot usati:")
+    for user, _ in ACCOUNTS:
+        used = state["credits_used"].get(user, 0)
+        print(f"  {user}: {used}/500")
+    print(f"{'='*60}\n")
     return len(final_cars)
 
 
