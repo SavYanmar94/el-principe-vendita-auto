@@ -27,13 +27,15 @@ jobs:
           playwright install chromium
           playwright install-deps chromium
 
-      - name: Esegui scraper (scarica auto + immagini)
+      - name: Esegui scraper
         run: python scraper/scraper.py
 
-      - name: Commit cars.json e immagini
+      - name: Commit aggiornamenti
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add cars.json img/
+          git add cars.json
+          # Aggiunge img/ solo se la cartella esiste
+          [ -d "img" ] && git add img/ || echo "Nessuna immagine scaricata, skip img/"
           git diff --staged --quiet || git commit -m "Aggiorna annunci auto $(date +'%d/%m/%Y %H:%M')"
           git push
